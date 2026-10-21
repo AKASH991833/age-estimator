@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgeLens - Age & Gender Estimator</title>
+<meta name="description" content="Estimate age and gender presentation for every face in a photo or webcam stream - neural networks running fully on your device, with an age-distribution view for group shots.">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d9488">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="design.css">
+<style>
+.stage{position:relative;border-radius:16px;overflow:hidden;background:#0b1220;border:1px solid var(--border)}
+.stage canvas,.stage video,.stage img{display:block;width:100%;height:auto}
+.overlay{position:absolute;inset:0;pointer-events:none}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.sect{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+.face-list{display:grid;gap:10px}
+.frow{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.frow .av{width:52px;height:52px;border-radius:10px;background:var(--surface2);object-fit:cover}
+.frow .meta b{display:block;font-size:14px}
+.frow .meta span{font-size:12px;color:var(--muted)}
+.age-big{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--accent);text-align:right}
+.age-big small{display:block;font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.gbar{display:flex;height:6px;border-radius:99px;overflow:hidden;background:var(--surface2);margin-top:7px;max-width:220px}
+.gbar i{display:block;height:100%}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+.stat{background:var(--surface2);border-radius:12px;padding:11px 13px}
+.stat b{display:block;font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
+.stat span{font-size:11.5px;color:var(--muted);font-weight:600}
+.hist{display:grid;gap:7px}
+.hrow{display:grid;grid-template-columns:64px 1fr 30px;gap:8px;align-items:center;font-size:11.5px;color:var(--muted);font-weight:600}
+.hrow .tr{height:14px;border-radius:6px;background:var(--surface2);overflow:hidden}
+.hrow .fl{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.hrow .n{text-align:right;font-variant-numeric:tabular-nums}
+.limit-card{border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--surface));font-size:13.5px;color:var(--muted);margin-top:22px}
+.limit-card b{color:var(--ink)}
+.stack{display:grid;gap:22px}
+.toggles{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;font-weight:600}
+.toggles label{display:flex;gap:7px;align-items:center;cursor:pointer}
+@media(max-width:900px){.grid2{grid-template-columns:1fr!important}}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#g)"/><circle cx="12" cy="12" r="6.5" stroke="#fff" stroke-width="1.7"/><path d="M12 8.5v3.5l2.4 2.4" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="24"><stop stop-color="#0d9488"/><stop offset="1" stop-color="#2dd4bf"/></linearGradient></defs></svg>&nbsp;AgeLens</div>
+  <span class="sp"></span>
+  <button id="btn-install" class="icon-btn" hidden title="Install app">⤓</button>
+  <button id="btn-theme" class="icon-btn" title="Toggle theme">☾</button>
+</nav>
+<main class="page">
+  <header class="page-head">
+    <h1>How old does the network <em>think</em> you look?</h1>
+    <p>A face detector plus an age-and-gender network run fully on your device. Point the camera, drop a group photo, and see per-face estimates with an age-distribution view. Nothing leaves the browser.</p>
+  </header>
+  <div class="toolbar">
+    <button class="btn primary" id="camBtn">Start webcam</button>
+    <label class="btn ghost" style="margin:0">Upload photo<input type="file" id="file" accept="image/*" hidden></label>
+    <button class="btn ghost" id="sample1">Sample: portrait</button>
+    <button class="btn ghost" id="sample2">Sample: two people</button>
+    <button class="btn ghost" id="sample3">Sample: group</button>
+    <div class="toggles">
+      <label><input type="checkbox" id="tBox" checked> Labels</label>
+      <label><input type="checkbox" id="tLand"> Landmarks</label>
+    </div>
+  </div>
+  <div class="grid grid2" style="display:grid;grid-template-columns:1.25fr .75fr;gap:22px;align-items:start">
+    <div class="stack">
+      <section class="card" style="overflow:hidden"><div class="card-body" style="padding:14px">
+        <div class="stage" id="stage">
+          <div style="aspect-ratio:4/3;display:grid;place-items:center;color:#94a3c0;font-size:14px" id="empty">Start the webcam or load an image</div>
+        </div>
+      </div></section>
+      <section class="card"><div class="card-body">
+        <h2 class="sect">Age distribution</h2>
+        <div class="hist" id="hist"><p style="font-size:13.5px;color:var(--muted)">No faces yet.</p></div>
+      </div></section>
+      <section class="card limit-card"><div class="card-body">
+        <b>Honest limits.</b> Age estimation in the wild is approximate - this compact model is typically within about 5-8 years on clear frontal faces and worse on children, side angles, or low light. "Gender" here is a binary prediction of presentation (hair, features, styling) from pixels - it is not identity, and it can be wrong. Use it for demos and fun, never to judge or identify a person. All inference is local; nothing is uploaded.
+      </div></section>
+    </div>
+    <div class="stack">
+      <section class="card"><div class="card-body">
+        <h2 class="sect">Live stats</h2>
+        <div class="stat-grid">
+          <div class="stat"><b id="st-faces">0</b><span>Faces</span></div>
+          <div class="stat"><b id="st-avg">-</b><span>Mean est. age</span></div>
+          <div class="stat"><b id="st-fps">-</b><span>FPS</span></div>
+          <div class="stat"><b id="st-ms">-</b><span>Inference ms</span></div>
+          <div class="stat"><b id="st-model">loading...</b><span>Model</span></div>
+          <div class="stat"><b id="st-range">-</b><span>Age span</span></div>
+        </div>
+      </div></section>
+      <section class="card"><div class="card-body">
+        <h2 class="sect">Faces</h2>
+        <div class="face-list" id="faces"><p style="font-size:13.5px;color:var(--muted)">No faces yet.</p></div>
+      </div></section>
+    </div>
+  </div>
+</main>
+<script src="core.js"></script>
+<script src="vendor/face-api.min.js"></script>
+<script src="app.js"></script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')</script>
+</body>
+</html>
